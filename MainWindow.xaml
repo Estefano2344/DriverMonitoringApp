@@ -5,8 +5,8 @@
         Height="700"
         Width="1000"
         ResizeMode="NoResize"
-        WindowStartupLocation="CenterScreen">
-
+        WindowStartupLocation="CenterScreen"
+        Closing="Window_Closing">
     <Grid>
         <!-- Contenido principal -->
         <Grid x:Name="MainContent">
@@ -18,32 +18,84 @@
             <!-- MONITOREO Panel -->
             <Border BorderBrush="Black" BorderThickness="10" Background="White" Margin="10">
                 <StackPanel>
-                    <TextBlock Text="MONITOREO" FontSize="40" FontWeight="Bold" Foreground="Black"
-                               HorizontalAlignment="Center" Margin="0,20"/>
-                    <TextBox x:Name="MonitoringLog" Width="350" Height="500" Background="Black"
-                             Foreground="Lime" FontSize="14" FontFamily="Consolas"
-                             IsReadOnly="True" VerticalScrollBarVisibility="Auto"/>
+                    <TextBlock Text="MONITOREO" 
+                             FontSize="40" 
+                             FontWeight="Bold" 
+                             Foreground="Black"
+                             HorizontalAlignment="Center" 
+                             Margin="0,20"/>
+
+                    <TextBox x:Name="MonitoringLog" 
+                            Width="350" 
+                            Height="500" 
+                            Background="Black"
+                            Foreground="Lime" 
+                            FontSize="14" 
+                            FontFamily="Consolas"
+                            IsReadOnly="True" 
+                            VerticalScrollBarVisibility="Auto"/>
                 </StackPanel>
             </Border>
 
             <!-- Cámara y Controles -->
-            <StackPanel Grid.Column="1" Margin="20" HorizontalAlignment="Center" VerticalAlignment="Center">
-                <Border x:Name="CameraPlaceholder" Width="500" Height="500" BorderBrush="Black"
-                        BorderThickness="1" Margin="0,0,0,20" />
-                <ComboBox x:Name="CameraSelector" Width="200" Height="30" Margin="0,0,0,20" />
-                <Button x:Name="ActivateButton" Content="ENCENDER" Background="Black" Foreground="White"
-                        FontSize="24" Width="200" Height="50" Click="ActivateButton_Click"/>
+            <StackPanel Grid.Column="1" 
+                        Margin="20" 
+                        HorizontalAlignment="Center" 
+                        VerticalAlignment="Center">
+                <Border x:Name="CameraPlaceholder" 
+                        Width="500" 
+                        Height="500" 
+                        BorderBrush="Black"
+                        BorderThickness="1" 
+                        Margin="0,0,0,20">
+                    <TextBlock Text="Cámara no iniciada"
+                             Foreground="Gray"
+                             HorizontalAlignment="Center"
+                             VerticalAlignment="Center"
+                             FontSize="16"/>
+                </Border>
+
+                <ComboBox x:Name="CameraSelector" 
+                         Width="200" 
+                         Height="30" 
+                         Margin="0,0,0,20"
+                         SelectionChanged="CameraSelector_SelectionChanged"/>
+
+                <Button x:Name="ToggleProcessingButton" 
+                        Content="ENCENDER" 
+                        Background="Black" 
+                        Foreground="White"
+                        FontSize="24" 
+                        Width="200" 
+                        Height="50" 
+                        Click="ToggleProcessingButton_Click"/>
             </StackPanel>
         </Grid>
 
         <!-- Superposición de la Alerta -->
-        <Grid x:Name="AlertOverlay" Background="#88000000" Visibility="Hidden">
-            <Border Background="Red" CornerRadius="10" Padding="20" HorizontalAlignment="Center" VerticalAlignment="Center">
+        <Grid x:Name="AlertOverlay" 
+              Background="#88000000" 
+              Visibility="Hidden">
+            <Border Background="Red" 
+                    CornerRadius="10" 
+                    Padding="20" 
+                    HorizontalAlignment="Center" 
+                    VerticalAlignment="Center">
                 <StackPanel>
-                    <TextBlock Text="¡DESPIERTA!" FontSize="50" FontWeight="Bold" Foreground="White"
-                               HorizontalAlignment="Center" Margin="0,20"/>
-                    <Button Content="Cerrar Alerta" Width="200" Height="50" FontSize="20"
-                            HorizontalAlignment="Center" Click="CloseAlertButton_Click"/>
+                    <TextBlock x:Name="AlertMessage"
+                             Text="¡DESPIERTA!" 
+                             FontSize="50" 
+                             FontWeight="Bold" 
+                             Foreground="White"
+                             HorizontalAlignment="Center" 
+                             Margin="0,20"/>
+
+                    <Button Content="Cerrar Alerta" 
+                            Width="200" 
+                            Height="50" 
+                            FontSize="20"
+                            HorizontalAlignment="Center" 
+                            Click="CloseAlertButton_Click"/>
                 </StackPanel>
             </Border>
         </Grid>

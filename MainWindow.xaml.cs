@@ -8,136 +8,256 @@ using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using Emgu.CV;
+using Emgu.CV.Structure;
 
 namespace DriverMonitoringApp
 {
     public partial class MainWindow : Window
     {
-        private VideoCapture _capture = null;
-        private bool isCameraOn = false;
-        private bool isUsingServerVideo = false;
+        private VideoCapture _capture;
         private ClientWebSocket _webSocket;
+        private CancellationTokenSource _processingCts;
+        private readonly SemaphoreSlim _frameProcessingSemaphore = new SemaphoreSlim(1, 1);
+        private bool _isProcessing;
+
+        // Constantes
+        private const int FRAME_INTERVAL_MS = 33; // ~30 FPS
+        private const int RECONNECT_DELAY_MS = 5000;
+        private const string SERVER_URL = "ws://127.0.0.1:8000/video_stream";
 
         public MainWindow()
         {
             InitializeComponent();
-            PopulateCameraSelector();
+            InitializeCamera();
         }
 
-        private void PopulateCameraSelector()
-        {
-            CameraSelector.Items.Clear();
-
-            for (int i = 0; i < 10; i++)
-            {
-                using (var testCapture = new VideoCapture(i))
-                {
-                    if (testCapture.IsOpened)
-                    {
-                        CameraSelector.Items.Add(new ComboBoxItem
-                        {
-                            Content = $"Camera {i}",
-                            Tag = i
-                        });
-                    }
-                }
-            }
-
-            if (CameraSelector.Items.Count > 0)
-            {
-                CameraSelector.SelectedIndex = 0;
-            }
-            else
-            {
-                MessageBox.Show("No se encontraron cámaras disponibles.", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
-            }
-        }
-
-        private void InitializeCamera(int cameraIndex)
+        private void InitializeCamera()
         {
             try
             {
-                _capture = new VideoCapture(cameraIndex);
+                _capture = new VideoCapture(0);
                 if (!_capture.IsOpened)
                 {
-                    throw new Exception($"No se pudo abrir la cámara con índice {cameraIndex}.");
+                    throw new Exception("No se pudo abrir la cámara.");
                 }
 
-                _capture.ImageGrabbed += ProcessFrameLocal;
-                _capture.Start();
+                // Configurar resolución de la cámara
+                _capture.Set(Emgu.CV.CvEnum.CapProp.FrameWidth, 640);
+                _capture.Set(Emgu.CV.CvEnum.CapProp.FrameHeight, 480);
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Error al inicializar la cámara: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                MessageBox.Show($"Error al inicializar la cámara: {ex.Message}",
+                    "Error", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 
-        private void ProcessFrameLocal(object sender, EventArgs e)
+        private async Task InitializeWebSocket()
         {
-            if (_capture != null && _capture.Ptr != IntPtr.Zero && !isUsingServerVideo)
+            try
             {
-                using (var frame = new Mat())
+                _webSocket = new ClientWebSocket();
+                await _webSocket.ConnectAsync(new Uri(SERVER_URL), CancellationToken.None);
+
+                _ = Task.Run(ReceiveServerMessages);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Error al conectar con el servidor: {ex.Message}",
+                    "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        private async Task ReceiveServerMessages()
+        {
+            var buffer = new byte[1024 * 1024]; // 1MB buffer
+
+            while (_webSocket.State == WebSocketState.Open)
+            {
+                try
                 {
-                    _capture.Retrieve(frame);
-                    if (!frame.IsEmpty)
+                    var result = await _webSocket.ReceiveAsync(
+                        new ArraySegment<byte>(buffer), CancellationToken.None);
+
+                    if (result.MessageType == WebSocketMessageType.Binary)
                     {
-                        var imageBrush = new ImageBrush(ConvertToBitmapSource(frame));
-                        CameraPlaceholder.Background = imageBrush;
+                        await ProcessReceivedFrame(buffer, result.Count);
+                    }
+                    else if (result.MessageType == WebSocketMessageType.Text)
+                    {
+                        var message = System.Text.Encoding.UTF8.GetString(
+                            buffer, 0, result.Count);
+                        await Dispatcher.InvokeAsync(() => ShowAlert(message));
                     }
                 }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Error recibiendo mensajes: {ex.Message}");
+                    await Task.Delay(100);
+                }
             }
         }
 
-        private void ActivateButton_Click(object sender, RoutedEventArgs e)
+        private async Task ProcessReceivedFrame(byte[] frameData, int count)
         {
-            if (!isCameraOn)
+            try
             {
-                if (CameraSelector.SelectedItem is ComboBoxItem selectedCamera)
+                using var stream = new MemoryStream(frameData, 0, count);
+                var bitmap = new BitmapImage();
+                bitmap.BeginInit();
+                bitmap.StreamSource = stream;
+                bitmap.CacheOption = BitmapCacheOption.OnLoad;
+                bitmap.EndInit();
+
+                if (bitmap.CanFreeze)
                 {
-                    int cameraIndex = (int)selectedCamera.Tag;
-                    InitializeCamera(cameraIndex);
-                    isCameraOn = true;
-                    ActivateButton.Content = "APAGAR";
+                    bitmap.Freeze();
                 }
-                else
+
+                await Dispatcher.InvokeAsync(() =>
                 {
-                    MessageBox.Show("Selecciona una cámara de la lista.", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                    CameraPlaceholder.Background = new ImageBrush(bitmap);
+                });
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error procesando frame: {ex.Message}");
+            }
+        }
+
+        private async Task ProcessAndSendFrames(CancellationToken cancellationToken)
+        {
+            while (!cancellationToken.IsCancellationRequested &&
+                   _webSocket?.State == WebSocketState.Open)
+            {
+                try
+                {
+                    await _frameProcessingSemaphore.WaitAsync();
+
+                    using var frame = new Mat();
+                    _capture.Read(frame);
+
+                    if (frame.IsEmpty)
+                    {
+                        continue;
+                    }
+
+                    // Comprimir frame como JPEG con calidad moderada
+                    byte[] frameData = frame.ToImage<Bgr, byte>()
+                        .Convert<Bgr, byte>()
+                        .ToJpegData(quality: 80);
+
+                    await _webSocket.SendAsync(
+                        new ArraySegment<byte>(frameData),
+                        WebSocketMessageType.Binary,
+                        true,
+                        cancellationToken);
+
+                    await Task.Delay(FRAME_INTERVAL_MS, cancellationToken);
                 }
+                catch (OperationCanceledException)
+                {
+                    break;
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Error procesando frame: {ex.Message}");
+                    await Task.Delay(100, cancellationToken);
+                }
+                finally
+                {
+                    _frameProcessingSemaphore.Release();
+                }
+            }
+        }
+
+        private async void ToggleProcessingButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (!_isProcessing)
+            {
+                await StartProcessing();
             }
             else
             {
-                isCameraOn = false;
-                if (_capture != null)
-                {
-                    _capture.Stop();
-                    _capture.Dispose();
-                    _capture = null;
-                }
-                ActivateButton.Content = "ENCENDER";
+                await StopProcessing();
             }
         }
 
-        private BitmapImage ConvertToBitmapSource(Mat mat)
+        private async Task StartProcessing()
         {
-            using (var bitmap = mat.ToBitmap())
+            try
             {
-                var bitmapImage = new BitmapImage();
-                using (var stream = new MemoryStream())
-                {
-                    bitmap.Save(stream, System.Drawing.Imaging.ImageFormat.Bmp);
-                    stream.Seek(0, SeekOrigin.Begin);
-                    bitmapImage.BeginInit();
-                    bitmapImage.StreamSource = stream;
-                    bitmapImage.CacheOption = BitmapCacheOption.OnLoad;
-                    bitmapImage.EndInit();
-                }
-                return bitmapImage;
+                await InitializeWebSocket();
+                _processingCts = new CancellationTokenSource();
+                _isProcessing = true;
+                ToggleProcessingButton.Content = "Detener";
+
+                _ = ProcessAndSendFrames(_processingCts.Token);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Error al iniciar el procesamiento: {ex.Message}",
+                    "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                await StopProcessing();
             }
         }
 
-        private void CloseAlertButton_Click(object sender, RoutedEventArgs e)
+        private async Task StopProcessing()
         {
-            AlertOverlay.Visibility = Visibility.Hidden;
+            try
+            {
+                _isProcessing = false;
+                _processingCts?.Cancel();
+
+                if (_webSocket?.State == WebSocketState.Open)
+                {
+                    await _webSocket.CloseAsync(
+                        WebSocketCloseStatus.NormalClosure,
+                        "Cerrando conexión",
+                        CancellationToken.None);
+                }
+
+                _webSocket?.Dispose();
+                _webSocket = null;
+                ToggleProcessingButton.Content = "Iniciar";
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error al detener el procesamiento: {ex.Message}");
+            }
+        }
+
+        private void ShowAlert(string message)
+        {
+            AlertOverlay.Visibility = Visibility.Visible;
+            AlertMessage.Text = message;
+
+            try
+            {
+                var soundPlayer = new System.Media.SoundPlayer("alert.wav");
+                soundPlayer.Play();
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error reproduciendo sonido de alerta: {ex.Message}");
+            }
+
+            // Programar el cierre automático de la alerta después de 5 segundos
+            Task.Delay(5000).ContinueWith(_ =>
+            {
+                Dispatcher.Invoke(() =>
+                {
+                    AlertOverlay.Visibility = Visibility.Collapsed;
+                });
+            });
+        }
+
+        private void Window_Closing(object sender, System.ComponentModel.CancelEventArgs e)
+        {
+            _ = StopProcessing();
+            _capture?.Dispose();
+            _frameProcessingSemaphore?.Dispose();
+            _processingCts?.Dispose();
         }
     }
 }
