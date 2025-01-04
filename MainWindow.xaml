@@ -30,6 +30,7 @@
             <StackPanel Grid.Column="1" Margin="20" HorizontalAlignment="Center" VerticalAlignment="Center">
                 <Border x:Name="CameraPlaceholder" Width="500" Height="500" BorderBrush="Black"
                         BorderThickness="1" Margin="0,0,0,20" />
+                <ComboBox x:Name="CameraSelector" Width="200" Height="30" Margin="0,0,0,20" />
                 <Button x:Name="ActivateButton" Content="ENCENDER" Background="Black" Foreground="White"
                         FontSize="24" Width="200" Height="50" Click="ActivateButton_Click"/>
             </StackPanel>
