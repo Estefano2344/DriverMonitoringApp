@@ -48,7 +48,8 @@
                         BorderBrush="Black"
                         BorderThickness="1" 
                         Margin="0,0,0,20">
-                    <TextBlock Text="Cámara no iniciada"
+                    <TextBlock x:Name="CameraPlaceholderText"
+                             Text="Cámara no iniciada"
                              Foreground="Gray"
                              HorizontalAlignment="Center"
                              VerticalAlignment="Center"
@@ -76,25 +77,32 @@
         <Grid x:Name="AlertOverlay" 
               Background="#88000000" 
               Visibility="Hidden">
-            <Border Background="Red" 
-                    CornerRadius="10" 
-                    Padding="20" 
+            <Border x:Name="AlertBorder"
+                    Background="Red" 
+                    CornerRadius="20" 
+                    Padding="30" 
+                    MaxWidth="600"
                     HorizontalAlignment="Center" 
                     VerticalAlignment="Center">
                 <StackPanel>
                     <TextBlock x:Name="AlertMessage"
-                             Text="¡DESPIERTA!" 
-                             FontSize="50" 
+                             Text="¡ALERTA!" 
+                             FontSize="40" 
                              FontWeight="Bold" 
                              Foreground="White"
+                             TextWrapping="Wrap"
+                             TextAlignment="Center"
                              HorizontalAlignment="Center" 
                              Margin="0,20"/>
 
-                    <Button Content="Cerrar Alerta" 
+                    <Button Content="Confirmar" 
                             Width="200" 
                             Height="50" 
                             FontSize="20"
-                            HorizontalAlignment="Center" 
+                            Background="White"
+                            Foreground="Red"
+                            FontWeight="Bold"
+                            HorizontalAlignment="Center"
                             Click="CloseAlertButton_Click"/>
                 </StackPanel>
             </Border>
