@@ -23,6 +23,7 @@ namespace DriverMonitoringApp
         private bool _isProcessing;
         private bool _alertActive = false;
         private System.Media.SoundPlayer _currentSound;
+        private System.Windows.Threading.DispatcherTimer _flashTimer;
 
         // Constantes
         private const int FRAME_INTERVAL_MS = 33; // ~30 FPS
@@ -372,13 +373,22 @@ namespace DriverMonitoringApp
                 // Detener el sonido inmediatamente
                 StopCurrentSound();
 
+                // Detener cualquier parpadeo activo
+                if (_flashTimer != null)
+                {
+                    _flashTimer.Stop();
+                    _flashTimer = null;
+                }
+
+                // Asegurar que el fondo vuelve a blanco
+                this.Background = new SolidColorBrush(Colors.White);
+
                 // Deshabilitar el botón temporalmente para evitar doble click
                 if (sender is Button button)
                     button.IsEnabled = false;
 
                 // Ocultar la alerta inmediatamente
                 AlertOverlay.Visibility = Visibility.Collapsed;
-                this.Background = new SolidColorBrush(Colors.White);
                 
                 if (_webSocket?.State == WebSocketState.Open)
                 {
@@ -457,17 +467,29 @@ namespace DriverMonitoringApp
 
         private void FlashWindow()
         {
-            var timer = new System.Windows.Threading.DispatcherTimer
+            // Detener timer existente si hay uno
+            if (_flashTimer != null)
+            {
+                _flashTimer.Stop();
+                _flashTimer = null;
+            }
+
+            // Asegurar que empezamos desde un estado conocido
+            this.Background = new SolidColorBrush(Colors.White);
+            
+            _flashTimer = new System.Windows.Threading.DispatcherTimer
             {
                 Interval = TimeSpan.FromMilliseconds(500)
             };
             
             var flashCount = 0;
-            timer.Tick += (s, e) =>
+            _flashTimer.Tick += (s, e) =>
             {
                 if (flashCount++ >= 6)
                 {
-                    timer.Stop();
+                    _flashTimer.Stop();
+                    this.Background = new SolidColorBrush(Colors.White);
+                    _flashTimer = null;
                     return;
                 }
                 
@@ -476,7 +498,7 @@ namespace DriverMonitoringApp
                     : new SolidColorBrush(Colors.White);
             };
             
-            timer.Start();
+            _flashTimer.Start();
         }
 
         private void UpdateMonitoringLog(string message)
