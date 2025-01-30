@@ -6,7 +6,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
-using DriverMonitoringApp.Connections; // Importar la clase WebSocketConnection
+using DriverMonitoringApp.Connections;
 using Emgu.CV;
 using Emgu.CV.Structure;
 using Newtonsoft.Json;
@@ -17,7 +17,7 @@ namespace DriverMonitoringApp.Views
     public partial class MainWindow : Window
     {
         private VideoCapture _capture;
-        private WebSocketConnection _webSocketConnection; // Reemplaza ClientWebSocket con WebSocketConnection
+        private WebSocketConnection _webSocketConnection;
         private CancellationTokenSource _processingCts;
         private readonly SemaphoreSlim _frameProcessingSemaphore = new SemaphoreSlim(1, 1);
         private bool _isProcessing;
@@ -25,16 +25,13 @@ namespace DriverMonitoringApp.Views
         private System.Media.SoundPlayer _currentSound;
         private System.Windows.Threading.DispatcherTimer _flashTimer;
 
-        // Constantes
-        private const int FRAME_INTERVAL_MS = 33; // ~30 FPS
+        private const int FRAME_INTERVAL_MS = 33;
         private const string SERVER_URL = "ws://127.0.0.1:8000/video_stream";
 
         public MainWindow()
         {
             InitializeComponent();
             _webSocketConnection = new WebSocketConnection(SERVER_URL);
-
-            // Suscribirse a los eventos de WebSocketConnection
             _webSocketConnection.OnTextMessageReceived += HandleTextMessage;
             _webSocketConnection.OnBinaryMessageReceived += HandleBinaryMessage;
             _webSocketConnection.OnError += HandleWebSocketError;
@@ -179,6 +176,39 @@ namespace DriverMonitoringApp.Views
             }
         }
 
+        private void CameraSelector_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (CameraSelector.SelectedItem != null)
+            {
+                try
+                {
+                    _capture?.Dispose();
+                    int selectedIndex = CameraSelector.SelectedIndex;
+                    _capture = new VideoCapture(selectedIndex);
+                    _capture.Set(Emgu.CV.CvEnum.CapProp.FrameWidth, 640);
+                    _capture.Set(Emgu.CV.CvEnum.CapProp.FrameHeight, 480);
+                    UpdateMonitoringLog($"Cámara cambiada a dispositivo {selectedIndex}");
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show($"Error al cambiar la cámara: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                }
+            }
+        }
+
+        private void CloseAlertButton_Click(object sender, RoutedEventArgs e)
+        {
+            AlertOverlay.Visibility = Visibility.Hidden;
+            StopCurrentSound();
+        }
+
+        private void StopCurrentSound()
+        {
+            _currentSound?.Stop();
+            _currentSound?.Dispose();
+            _currentSound = null;
+        }
+
         private void HandleTextMessage(string message)
         {
             Dispatcher.Invoke(() => ShowAlert(message));
@@ -232,6 +262,37 @@ namespace DriverMonitoringApp.Views
             {
                 await StopProcessing();
             }
+        }
+
+        // En MainWindow.xaml.cs
+        private void LoadAvailableCameras()
+        {
+            // Implementación para cargar cámaras disponibles
+            CameraSelector.Items.Clear();
+            for (int i = 0; i < 10; i++)
+            {
+                using var cap = new VideoCapture(i);
+                if (cap.IsOpened)
+                {
+                    CameraSelector.Items.Add($"Cámara {i}");
+                }
+            }
+            CameraSelector.SelectedIndex = 0;
+        }
+
+        private void UpdateMonitoringLog(string message)
+        {
+            MonitoringLog.AppendText($"{message}\n");
+            MonitoringLog.ScrollToEnd();
+        }
+
+        private void ShowAlert(string message)
+        {
+            Dispatcher.Invoke(() =>
+            {
+                AlertOverlay.Visibility = Visibility.Visible;
+                AlertMessage.Text = message;
+            });
         }
 
         private void Window_Closing(object sender, System.ComponentModel.CancelEventArgs e)
