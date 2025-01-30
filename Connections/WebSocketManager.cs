@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Net.WebSockets;
 using System.Threading;
 using System.Threading.Tasks;
@@ -24,6 +25,7 @@ namespace DriverMonitoringApp.Connections
         {
             try
             {
+                _webSocket?.Dispose();
                 _webSocket = new ClientWebSocket();
                 await _webSocket.ConnectAsync(new Uri(_serverUrl), cancellationToken);
                 _ = Task.Run(() => ReceiveMessages(cancellationToken));
@@ -32,54 +34,101 @@ namespace DriverMonitoringApp.Connections
             {
                 OnError?.Invoke(ex);
             }
+            
         }
 
         public async Task SendTextMessageAsync(string message, CancellationToken cancellationToken)
         {
-            if (_webSocket.State == WebSocketState.Open)
+            try
             {
-                var buffer = System.Text.Encoding.UTF8.GetBytes(message);
-                await _webSocket.SendAsync(new ArraySegment<byte>(buffer), WebSocketMessageType.Text, true, cancellationToken);
+                if (_webSocket.State == WebSocketState.Open)
+                {
+                    var buffer = System.Text.Encoding.UTF8.GetBytes(message);
+                    await _webSocket.SendAsync(new ArraySegment<byte>(buffer), WebSocketMessageType.Text, true, cancellationToken);
+                }
+            }
+            catch (Exception ex)
+            {
+                OnError?.Invoke(ex);
             }
         }
 
         public async Task SendBinaryMessageAsync(byte[] data, CancellationToken cancellationToken)
         {
-            if (_webSocket.State == WebSocketState.Open)
+            try
             {
-                await _webSocket.SendAsync(new ArraySegment<byte>(data), WebSocketMessageType.Binary, true, cancellationToken);
+                if (_webSocket.State == WebSocketState.Open)
+                {
+                    await _webSocket.SendAsync(new ArraySegment<byte>(data), WebSocketMessageType.Binary, true, cancellationToken);
+                }
+            }
+            catch (Exception ex)
+            {
+                OnError?.Invoke(ex);
             }
         }
 
         public async Task DisconnectAsync()
         {
-            if (_webSocket.State == WebSocketState.Open)
+            try
             {
-                await _webSocket.CloseAsync(WebSocketCloseStatus.NormalClosure, "Connection closed", CancellationToken.None);
+                if (_webSocket.State == WebSocketState.Open)
+                {
+                    await _webSocket.CloseAsync(WebSocketCloseStatus.NormalClosure, "Connection closed", CancellationToken.None);
+                }
             }
-            _webSocket.Dispose();
+            finally
+            {
+                _webSocket.Dispose();
+            }
+        }
+
+        public async Task StartVideoStreamAsync(CancellationToken cancellationToken)
+        {
+            Console.WriteLine("Enviando comando start_stream...");  // <-- Log de diagnóstico
+            await SendTextMessageAsync("start_stream", cancellationToken);
         }
 
         private async Task ReceiveMessages(CancellationToken cancellationToken)
         {
-            var buffer = new byte[1024 * 1024]; // 1MB buffer
+            var buffer = new byte[1024 * 1024];
+            List<byte> accumulatedData = null;
+            WebSocketMessageType? messageType = null;
 
             try
             {
-                while (_webSocket.State == WebSocketState.Open)
+                while (!cancellationToken.IsCancellationRequested && _webSocket.State == WebSocketState.Open)
                 {
                     var result = await _webSocket.ReceiveAsync(new ArraySegment<byte>(buffer), cancellationToken);
 
-                    if (result.MessageType == WebSocketMessageType.Text)
+                    if (result.MessageType == WebSocketMessageType.Close)
                     {
-                        var message = System.Text.Encoding.UTF8.GetString(buffer, 0, result.Count);
-                        OnTextMessageReceived?.Invoke(message);
+                        await _webSocket.CloseAsync(WebSocketCloseStatus.NormalClosure, "Closed by server", CancellationToken.None);
+                        break;
                     }
-                    else if (result.MessageType == WebSocketMessageType.Binary)
+
+                    if (accumulatedData == null)
                     {
-                        var data = new byte[result.Count];
-                        Array.Copy(buffer, data, result.Count);
-                        OnBinaryMessageReceived?.Invoke(data);
+                        messageType = result.MessageType;
+                        accumulatedData = new List<byte>();
+                    }
+
+                    accumulatedData.AddRange(new ArraySegment<byte>(buffer, 0, result.Count));
+
+                    if (result.EndOfMessage)
+                    {
+                        var messageData = accumulatedData.ToArray();
+                        if (messageType == WebSocketMessageType.Text)
+                        {
+                            var message = System.Text.Encoding.UTF8.GetString(messageData);
+                            OnTextMessageReceived?.Invoke(message);
+                        }
+                        else if (messageType == WebSocketMessageType.Binary)
+                        {
+                            OnBinaryMessageReceived?.Invoke(messageData);
+                        }
+                        accumulatedData = null;
+                        messageType = null;
                     }
                 }
             }

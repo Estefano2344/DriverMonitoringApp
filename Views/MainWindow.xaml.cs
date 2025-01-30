@@ -36,6 +36,7 @@ namespace DriverMonitoringApp.Views
             _webSocketConnection.OnBinaryMessageReceived += HandleBinaryMessage;
             _webSocketConnection.OnError += HandleWebSocketError;
 
+            
             LoadAvailableCameras();
             InitializeCamera();
         }
@@ -45,20 +46,15 @@ namespace DriverMonitoringApp.Views
             try
             {
                 _capture = new VideoCapture(0);
-                if (!_capture.IsOpened)
-                {
-                    MessageBox.Show("No se detectó una cámara en el índice 0.", "Error", MessageBoxButton.OK, MessageBoxImage.Warning);
-                    _capture = null; // Asegurar que no se use una cámara no válida
-                    return;
-                }
+                if (!_capture.IsOpened) throw new Exception("Cámara no detectada");
 
-                // Configurar resolución
+                // Configuración de resolución
                 _capture.Set(Emgu.CV.CvEnum.CapProp.FrameWidth, 640);
                 _capture.Set(Emgu.CV.CvEnum.CapProp.FrameHeight, 480);
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Error al inicializar la cámara: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                MessageBox.Show($"Error cámara: {ex.Message}");
                 _capture = null;
             }
         }
@@ -84,6 +80,7 @@ namespace DriverMonitoringApp.Views
                     });
 
                     await _webSocketConnection.ConnectAsync(CancellationToken.None);
+                    await _webSocketConnection.StartVideoStreamAsync(CancellationToken.None);
 
                     _isProcessing = true;
                     ToggleProcessingButton.Content = "Detener";
@@ -141,28 +138,24 @@ namespace DriverMonitoringApp.Views
             {
                 try
                 {
-                    if (_capture == null || !_capture.IsOpened) // Verificar estado
-                    {
-                        await Task.Delay(1000, cancellationToken);
-                        continue;
-                    }
-
-                    await _frameProcessingSemaphore.WaitAsync();
                     using var frame = new Mat();
-                    _capture.Read(frame);
+                    if (_capture == null || !_capture.IsOpened) continue;
 
+                    _capture.Read(frame);
                     if (frame.IsEmpty) continue;
 
-                    // Resto del código...
+                    // Convertir frame a JPEG
+                    var jpegBytes = frame.ToImage<Bgr, byte>().ToJpegData(quality: 75);
+
+                    // Enviar al servidor
+                    await _webSocketConnection.SendBinaryMessageAsync(jpegBytes, cancellationToken);
+
+                    await Task.Delay(FRAME_INTERVAL_MS, cancellationToken);
                 }
                 catch (OperationCanceledException) { break; }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"Error procesando frame: {ex.Message}");
-                }
-                finally
-                {
-                    _frameProcessingSemaphore.Release();
+                    Console.WriteLine($"Error frame: {ex.Message}");
                 }
             }
         }
