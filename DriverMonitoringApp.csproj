@@ -1,28 +1,33 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
+	<PropertyGroup>
+		<OutputType>WinExe</OutputType>
+		<TargetFramework>net8.0-windows</TargetFramework>
+		<Nullable>enable</Nullable>
+		<ImplicitUsings>enable</ImplicitUsings>
+		<UseWPF>true</UseWPF>
+	</PropertyGroup>
 
-  <PropertyGroup>
-    <OutputType>WinExe</OutputType>
-    <TargetFramework>net8.0-windows</TargetFramework>
-    <Nullable>enable</Nullable>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <UseWPF>true</UseWPF>
-  </PropertyGroup>
+	<!-- Configuración del sonido -->
+	<ItemGroup>
+		<Content Include="Alerta roja ｜ Efecto de sonido.wav">
+			<CopyToOutputDirectory>Always</CopyToOutputDirectory>
+		</Content>
+	</ItemGroup>
 
-  <ItemGroup>
-    <Content Include="Alerta roja ｜ Efecto de sonido.wav">
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-    </Content>
-  </ItemGroup>
-
-  <ItemGroup>
-    <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
-    <PackageReference Include="DirectShowLib" Version="1.0.0" />
-    <PackageReference Include="Emgu.CV" Version="4.9.0.5494" />
-    <PackageReference Include="Emgu.CV.Bitmap" Version="4.9.0.5494" />
-    <PackageReference Include="Emgu.CV.runtime.windows" Version="4.9.0.5494" />
-    <PackageReference Include="Emgu.CV.UI" Version="4.9.0.5494" />
-    <PackageReference Include="SharpDX" Version="4.2.0" />
-    <PackageReference Include="System.Net.WebSockets.Client.Managed" Version="1.0.22" />
-  </ItemGroup>
-
+	<!-- Paquetes NuGet -->
+	<ItemGroup>
+		<PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
+		<PackageReference Include="DirectShowLib" Version="1.0.0" />
+		<PackageReference Include="Emgu.CV" Version="4.9.0.5494" />
+		<PackageReference Include="Emgu.CV.Bitmap" Version="4.9.0.5494" />
+		<PackageReference Include="Emgu.CV.runtime.windows" Version="4.9.0.5494" />
+		<PackageReference Include="Emgu.CV.UI" Version="4.9.0.5494" />
+		<PackageReference Include="SharpDX" Version="4.2.0" />
+		<PackageReference Include="System.Net.WebSockets.Client.Managed" Version="1.0.22" />
+	</ItemGroup>
+	<ItemGroup>
+	  <Page Update="Views\MainWindow.xaml">
+	    <CopyToOutputDirectory>Never</CopyToOutputDirectory>
+	  </Page>
+	</ItemGroup>
 </Project>
