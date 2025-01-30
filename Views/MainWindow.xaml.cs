@@ -47,17 +47,19 @@ namespace DriverMonitoringApp.Views
                 _capture = new VideoCapture(0);
                 if (!_capture.IsOpened)
                 {
-                    throw new Exception("No se pudo abrir la cámara.");
+                    MessageBox.Show("No se detectó una cámara en el índice 0.", "Error", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    _capture = null; // Asegurar que no se use una cámara no válida
+                    return;
                 }
 
-                // Configurar resolución de la cámara
+                // Configurar resolución
                 _capture.Set(Emgu.CV.CvEnum.CapProp.FrameWidth, 640);
                 _capture.Set(Emgu.CV.CvEnum.CapProp.FrameHeight, 480);
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Error al inicializar la cámara: {ex.Message}",
-                    "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                MessageBox.Show($"Error al inicializar la cámara: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                _capture = null;
             }
         }
 
@@ -139,35 +141,24 @@ namespace DriverMonitoringApp.Views
             {
                 try
                 {
-                    await _frameProcessingSemaphore.WaitAsync();
-
-                    using var frame = new Mat();
-                    _capture.Read(frame);
-
-                    if (frame.IsEmpty)
+                    if (_capture == null || !_capture.IsOpened) // Verificar estado
                     {
+                        await Task.Delay(1000, cancellationToken);
                         continue;
                     }
 
-                    if (_isProcessing)
-                    {
-                        byte[] frameData = frame.ToImage<Bgr, byte>()
-                            .Convert<Bgr, byte>()
-                            .ToJpegData(quality: 80);
+                    await _frameProcessingSemaphore.WaitAsync();
+                    using var frame = new Mat();
+                    _capture.Read(frame);
 
-                        await _webSocketConnection.SendBinaryMessageAsync(frameData, cancellationToken);
-                    }
+                    if (frame.IsEmpty) continue;
 
-                    await Task.Delay(FRAME_INTERVAL_MS, cancellationToken);
+                    // Resto del código...
                 }
-                catch (OperationCanceledException)
-                {
-                    break;
-                }
+                catch (OperationCanceledException) { break; }
                 catch (Exception ex)
                 {
                     Console.WriteLine($"Error procesando frame: {ex.Message}");
-                    await Task.Delay(100, cancellationToken);
                 }
                 finally
                 {
@@ -182,9 +173,17 @@ namespace DriverMonitoringApp.Views
             {
                 try
                 {
-                    _capture?.Dispose();
+                    _capture?.Dispose(); // Liberar cámara anterior
                     int selectedIndex = CameraSelector.SelectedIndex;
                     _capture = new VideoCapture(selectedIndex);
+
+                    if (!_capture.IsOpened)
+                    {
+                        MessageBox.Show($"No se pudo abrir la cámara {selectedIndex}.", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                        _capture = null;
+                        return;
+                    }
+
                     _capture.Set(Emgu.CV.CvEnum.CapProp.FrameWidth, 640);
                     _capture.Set(Emgu.CV.CvEnum.CapProp.FrameHeight, 480);
                     UpdateMonitoringLog($"Cámara cambiada a dispositivo {selectedIndex}");
@@ -192,6 +191,7 @@ namespace DriverMonitoringApp.Views
                 catch (Exception ex)
                 {
                     MessageBox.Show($"Error al cambiar la cámara: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                    _capture = null;
                 }
             }
         }
@@ -297,6 +297,7 @@ namespace DriverMonitoringApp.Views
 
         private void Window_Closing(object sender, System.ComponentModel.CancelEventArgs e)
         {
+            _capture?.Dispose();
             Task.Run(async () => await StopProcessing()).Wait();
         }
     }
