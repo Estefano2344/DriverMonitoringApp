@@ -19,9 +19,17 @@ namespace DriverMonitoringApp
     /// </summary>
     public partial class AlertWindow : Window
     {
+        public event Action OnConfirmed; // Evento para notificar confirmación
+
         public AlertWindow()
         {
             InitializeComponent();
+        }
+
+        private void CloseButton_Click(object sender, RoutedEventArgs e)
+        {
+            OnConfirmed?.Invoke(); // Disparar evento
+            this.Close();
         }
     }
 }

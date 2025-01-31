@@ -24,9 +24,12 @@ namespace DriverMonitoringApp.Views
         private bool _alertActive = false;
         private System.Media.SoundPlayer _currentSound;
         private System.Windows.Threading.DispatcherTimer _flashTimer;
+        private AlertWindow _currentAlertWindow;
+        private bool _isAlertActive = false;
 
         private const int FRAME_INTERVAL_MS = 33;
         private const string SERVER_URL = "ws://127.0.0.1:8000/video_stream";
+
 
         public MainWindow()
         {
@@ -204,12 +207,21 @@ namespace DriverMonitoringApp.Views
 
         private void HandleTextMessage(string message)
         {
-            // Solo activar la alarma si el mensaje indica peligro
-            if (message.Contains("PELIGRO") || message.Contains("somnolencia"))
+            try
             {
-                Dispatcher.Invoke(() => ShowAlert(message));
+                if ((message.Contains("PELIGRO") || message.Contains("somnolencia")) && !_isAlertActive)
+                {
+                    _isAlertActive = true;
+                    ShowAlert();
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error procesando mensaje: {ex.Message}");
             }
         }
+
+
 
         private void HandleBinaryMessage(byte[] data)
         {
@@ -283,30 +295,49 @@ namespace DriverMonitoringApp.Views
             MonitoringLog.ScrollToEnd();
         }
 
-        private void ShowAlert(string message)
+        private void ShowAlert()
         {
-            Dispatcher.Invoke(() =>
+            Dispatcher.Invoke(async () =>
             {
-                AlertOverlay.Visibility = Visibility.Visible;
-                AlertMessage.Text = message;
-
-                // Reproducir el sonido de alerta
-                if (_currentSound == null)
+                if (_currentAlertWindow == null || !_currentAlertWindow.IsLoaded)
                 {
-                    string soundPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Assets", "Alerta_roja_Efecto_de_sonido.wav" // Nombre actualizado
-);
-                    if (File.Exists(soundPath))
+                    await StopProcessing(); // Detener monitoreo al activar alerta
+
+                    _currentAlertWindow = new AlertWindow();
+                    _currentAlertWindow.OnConfirmed += () =>
                     {
-                        _currentSound = new System.Media.SoundPlayer(soundPath);
-                        _currentSound.PlayLooping(); // Repetir hasta que se detenga
-                    }
-                    else
+                        // Reiniciar monitoreo al confirmar
+                        _isAlertActive = false;
+                        _ = StartProcessing();
+                    };
+
+                    _currentAlertWindow.Closed += (sender, e) =>
                     {
-                        MessageBox.Show("Archivo de sonido no encontrado", "Error", MessageBoxButton.OK, MessageBoxImage.Warning);
-                    }
+                        StopCurrentSound();
+                        _currentAlertWindow = null;
+                        _isAlertActive = false; // Permitir nuevas alertas
+                    };
+
+                    _currentAlertWindow.Show();
+                    PlayAlertSound();
                 }
             });
         }
+
+        private void PlayAlertSound()
+        {
+            if (_currentSound == null)
+            {
+                string soundPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Assets", "Alerta_roja_Efecto_de_sonido.wav");
+                if (File.Exists(soundPath))
+                {
+                    _currentSound = new System.Media.SoundPlayer(soundPath);
+                    _currentSound.PlayLooping();
+                }
+            }
+        }
+
+
 
         private void Window_Closing(object sender, System.ComponentModel.CancelEventArgs e)
         {

@@ -1,9 +1,24 @@
 ﻿<Window x:Class="DriverMonitoringApp.AlertWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Alerta" Height="300" Width="400" Background="Red">
+        Title="Alerta" 
+        Height="300" 
+        Width="400" 
+        Background="Red"
+        WindowStartupLocation="CenterScreen"
+        WindowStyle="None">
     <Grid>
-        <TextBlock Text="¡DESPIERTA!" FontSize="50" FontWeight="Bold" Foreground="White"
-                   HorizontalAlignment="Center" VerticalAlignment="Center"/>
+        <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
+            <TextBlock Text="¡DESPIERTA!" 
+                       FontSize="40" 
+                       FontWeight="Bold" 
+                       Foreground="White"
+                       Margin="0,0,0,20"/>
+            <Button Content="Confirmar" 
+                    Width="120" 
+                    Height="40" 
+                    Click="CloseButton_Click"
+                    Background="White"/>
+        </StackPanel>
     </Grid>
 </Window>
