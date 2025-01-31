@@ -6,13 +6,16 @@
 		<ImplicitUsings>enable</ImplicitUsings>
 		<UseWPF>true</UseWPF>
 	</PropertyGroup>
+	<ItemGroup>
+	  <None Remove="Assets\Alerta_roja_Efecto_de_sonido.wav" />
+	</ItemGroup>
+	<ItemGroup>
+	  <Content Include="Assets\Alerta_roja_Efecto_de_sonido.wav">
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+	  </Content>
+	</ItemGroup>
 
 	<!-- Configuración del sonido -->
-	<ItemGroup>
-		<Content Include="Alerta roja ｜ Efecto de sonido.wav">
-			<CopyToOutputDirectory>Always</CopyToOutputDirectory>
-		</Content>
-	</ItemGroup>
 
 	<!-- Paquetes NuGet -->
 	<ItemGroup>

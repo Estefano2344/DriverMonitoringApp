@@ -199,12 +199,16 @@ namespace DriverMonitoringApp.Views
         {
             _currentSound?.Stop();
             _currentSound?.Dispose();
-            _currentSound = null;
+            _currentSound = null; // Permitir reiniciar el sonido en la próxima alerta
         }
 
         private void HandleTextMessage(string message)
         {
-            Dispatcher.Invoke(() => ShowAlert(message));
+            // Solo activar la alarma si el mensaje indica peligro
+            if (message.Contains("PELIGRO") || message.Contains("somnolencia"))
+            {
+                Dispatcher.Invoke(() => ShowAlert(message));
+            }
         }
 
         private void HandleBinaryMessage(byte[] data)
@@ -285,6 +289,22 @@ namespace DriverMonitoringApp.Views
             {
                 AlertOverlay.Visibility = Visibility.Visible;
                 AlertMessage.Text = message;
+
+                // Reproducir el sonido de alerta
+                if (_currentSound == null)
+                {
+                    string soundPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Assets", "Alerta_roja_Efecto_de_sonido.wav" // Nombre actualizado
+);
+                    if (File.Exists(soundPath))
+                    {
+                        _currentSound = new System.Media.SoundPlayer(soundPath);
+                        _currentSound.PlayLooping(); // Repetir hasta que se detenga
+                    }
+                    else
+                    {
+                        MessageBox.Show("Archivo de sonido no encontrado", "Error", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    }
+                }
             });
         }
 
