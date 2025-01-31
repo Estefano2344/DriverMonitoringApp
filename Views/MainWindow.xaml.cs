@@ -24,9 +24,12 @@ namespace DriverMonitoringApp.Views
         private bool _alertActive = false;
         private System.Media.SoundPlayer _currentSound;
         private System.Windows.Threading.DispatcherTimer _flashTimer;
+        private AlertWindow _currentAlertWindow;
+        private bool _isAlertActive = false;
 
         private const int FRAME_INTERVAL_MS = 33;
         private const string SERVER_URL = "ws://127.0.0.1:8000/video_stream";
+
 
         public MainWindow()
         {
@@ -199,13 +202,26 @@ namespace DriverMonitoringApp.Views
         {
             _currentSound?.Stop();
             _currentSound?.Dispose();
-            _currentSound = null;
+            _currentSound = null; // Permitir reiniciar el sonido en la próxima alerta
         }
 
         private void HandleTextMessage(string message)
         {
-            Dispatcher.Invoke(() => ShowAlert(message));
+            try
+            {
+                if ((message.Contains("PELIGRO") || message.Contains("somnolencia")) && !_isAlertActive)
+                {
+                    _isAlertActive = true;
+                    ShowAlert();
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error procesando mensaje: {ex.Message}");
+            }
         }
+
+
 
         private void HandleBinaryMessage(byte[] data)
         {
@@ -279,14 +295,49 @@ namespace DriverMonitoringApp.Views
             MonitoringLog.ScrollToEnd();
         }
 
-        private void ShowAlert(string message)
+        private void ShowAlert()
         {
-            Dispatcher.Invoke(() =>
+            Dispatcher.Invoke(async () =>
             {
-                AlertOverlay.Visibility = Visibility.Visible;
-                AlertMessage.Text = message;
+                if (_currentAlertWindow == null || !_currentAlertWindow.IsLoaded)
+                {
+                    await StopProcessing(); // Detener monitoreo al activar alerta
+
+                    _currentAlertWindow = new AlertWindow();
+                    _currentAlertWindow.OnConfirmed += () =>
+                    {
+                        // Reiniciar monitoreo al confirmar
+                        _isAlertActive = false;
+                        _ = StartProcessing();
+                    };
+
+                    _currentAlertWindow.Closed += (sender, e) =>
+                    {
+                        StopCurrentSound();
+                        _currentAlertWindow = null;
+                        _isAlertActive = false; // Permitir nuevas alertas
+                    };
+
+                    _currentAlertWindow.Show();
+                    PlayAlertSound();
+                }
             });
         }
+
+        private void PlayAlertSound()
+        {
+            if (_currentSound == null)
+            {
+                string soundPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Assets", "Alerta_roja_Efecto_de_sonido.wav");
+                if (File.Exists(soundPath))
+                {
+                    _currentSound = new System.Media.SoundPlayer(soundPath);
+                    _currentSound.PlayLooping();
+                }
+            }
+        }
+
+
 
         private void Window_Closing(object sender, System.ComponentModel.CancelEventArgs e)
         {
